@@ -150,14 +150,113 @@ SCHEMA_ENTRADA = "raw"
 SCHEMA_SAIDA = "refined"
 FORMATO_DATA_HORA = "%Y-%m-%d %H:%M:%S"
 
-# Ordem de cada lista: (coluna em raw, coluna em refined, tipo em refined).
+# Os SELECTs abaixo são a transformação. Cada um lê de raw e devolve as colunas
+# de refined já renomeadas e tipadas. Nenhum apaga linha nem preenche nulo.
+
+SELECT_PEDIDOS = """
+SELECT
+    "order_id" AS pedido_id,
+    "customer_id" AS cliente_id,
+    "order_status" AS status,
+    strptime("order_purchase_timestamp", '%Y-%m-%d %H:%M:%S') AS data_compra,
+    strptime("order_approved_at", '%Y-%m-%d %H:%M:%S') AS data_aprovacao,
+    strptime("order_delivered_carrier_date", '%Y-%m-%d %H:%M:%S') AS data_envio,
+    strptime("order_delivered_customer_date", '%Y-%m-%d %H:%M:%S') AS data_entrega,
+    CAST(strptime("order_estimated_delivery_date", '%Y-%m-%d %H:%M:%S') AS DATE)
+        AS data_entrega_prevista
+FROM raw.pedidos
+"""
+
+SELECT_ITENS_PEDIDO = """
+SELECT
+    "order_id" AS pedido_id,
+    CAST("order_item_id" AS INTEGER) AS item_seq,
+    "product_id" AS produto_id,
+    "seller_id" AS vendedor_id,
+    strptime("shipping_limit_date", '%Y-%m-%d %H:%M:%S') AS data_limite_envio,
+    CAST("price" AS DECIMAL(10,2)) AS preco,
+    CAST("freight_value" AS DECIMAL(10,2)) AS frete
+FROM raw.itens_pedido
+"""
+
+SELECT_PAGAMENTOS = """
+SELECT
+    "order_id" AS pedido_id,
+    CAST("payment_sequential" AS INTEGER) AS pagamento_seq,
+    "payment_type" AS tipo,
+    CAST("payment_installments" AS INTEGER) AS parcelas,
+    CAST("payment_value" AS DECIMAL(10,2)) AS valor
+FROM raw.pagamentos
+"""
+
+SELECT_CLIENTES = """
+SELECT
+    "customer_id" AS cliente_id,
+    "customer_unique_id" AS cliente_unico_id,
+    "customer_zip_code_prefix" AS cep_prefixo,
+    "customer_city" AS cidade,
+    "customer_state" AS uf
+FROM raw.clientes
+"""
+
+SELECT_VENDEDORES = """
+SELECT
+    "seller_id" AS vendedor_id,
+    "seller_zip_code_prefix" AS cep_prefixo,
+    "seller_city" AS cidade,
+    "seller_state" AS uf
+FROM raw.vendedores
+"""
+
+SELECT_PRODUTOS = """
+SELECT
+    "product_id" AS produto_id,
+    "product_category_name" AS categoria,
+    CAST("product_name_lenght" AS INTEGER) AS tamanho_nome,
+    CAST("product_description_lenght" AS INTEGER) AS tamanho_descricao,
+    CAST("product_photos_qty" AS INTEGER) AS qtd_fotos,
+    CAST("product_weight_g" AS INTEGER) AS peso_g,
+    CAST("product_length_cm" AS INTEGER) AS comprimento_cm,
+    CAST("product_height_cm" AS INTEGER) AS altura_cm,
+    CAST("product_width_cm" AS INTEGER) AS largura_cm
+FROM raw.produtos
+"""
+
+SELECT_TRADUCAO_CATEGORIAS = """
+SELECT
+    "product_category_name" AS categoria,
+    "product_category_name_english" AS categoria_en
+FROM raw.traducao_categorias
+"""
+
+SELECT_AVALIACOES = """
+SELECT
+    "review_id" AS avaliacao_id,
+    "order_id" AS pedido_id,
+    CAST("review_score" AS INTEGER) AS nota,
+    "review_comment_title" AS titulo,
+    "review_comment_message" AS comentario,
+    CAST(strptime("review_creation_date", '%Y-%m-%d %H:%M:%S') AS DATE) AS data_criacao,
+    strptime("review_answer_timestamp", '%Y-%m-%d %H:%M:%S') AS data_resposta
+FROM raw.avaliacoes
+"""
+
+# Para cada tabela:
+#   select         o SELECT literal acima
+#   chave          chave de duplicatas (seção 5 da spec)
+#   colunas_raw    colunas de raw que o SELECT lê; devem ser exatamente as do banco
+#   tipadas        (coluna em raw, coluna em refined, tipo) das colunas que são
+#                  convertidas. Usado só para localizar a coluna que falhou.
 TABELAS = {
     "pedidos": {
+        "select": SELECT_PEDIDOS,
         "chave": ["pedido_id"],
-        "colunas": [
-            ("order_id", "pedido_id", "VARCHAR"),
-            ("customer_id", "cliente_id", "VARCHAR"),
-            ("order_status", "status", "VARCHAR"),
+        "colunas_raw": [
+            "order_id", "customer_id", "order_status", "order_purchase_timestamp",
+            "order_approved_at", "order_delivered_carrier_date",
+            "order_delivered_customer_date", "order_estimated_delivery_date",
+        ],
+        "tipadas": [
             ("order_purchase_timestamp", "data_compra", "TIMESTAMP"),
             ("order_approved_at", "data_aprovacao", "TIMESTAMP"),
             ("order_delivered_carrier_date", "data_envio", "TIMESTAMP"),
@@ -166,51 +265,58 @@ TABELAS = {
         ],
     },
     "itens_pedido": {
+        "select": SELECT_ITENS_PEDIDO,
         "chave": ["pedido_id", "item_seq"],
-        "colunas": [
-            ("order_id", "pedido_id", "VARCHAR"),
+        "colunas_raw": [
+            "order_id", "order_item_id", "product_id", "seller_id",
+            "shipping_limit_date", "price", "freight_value",
+        ],
+        "tipadas": [
             ("order_item_id", "item_seq", "INTEGER"),
-            ("product_id", "produto_id", "VARCHAR"),
-            ("seller_id", "vendedor_id", "VARCHAR"),
             ("shipping_limit_date", "data_limite_envio", "TIMESTAMP"),
             ("price", "preco", "DECIMAL(10,2)"),
             ("freight_value", "frete", "DECIMAL(10,2)"),
         ],
     },
     "pagamentos": {
+        "select": SELECT_PAGAMENTOS,
         "chave": ["pedido_id", "pagamento_seq"],
-        "colunas": [
-            ("order_id", "pedido_id", "VARCHAR"),
+        "colunas_raw": [
+            "order_id", "payment_sequential", "payment_type",
+            "payment_installments", "payment_value",
+        ],
+        "tipadas": [
             ("payment_sequential", "pagamento_seq", "INTEGER"),
-            ("payment_type", "tipo", "VARCHAR"),
             ("payment_installments", "parcelas", "INTEGER"),
             ("payment_value", "valor", "DECIMAL(10,2)"),
         ],
     },
     "clientes": {
+        "select": SELECT_CLIENTES,
         "chave": ["cliente_id"],
-        "colunas": [
-            ("customer_id", "cliente_id", "VARCHAR"),
-            ("customer_unique_id", "cliente_unico_id", "VARCHAR"),
-            ("customer_zip_code_prefix", "cep_prefixo", "VARCHAR"),
-            ("customer_city", "cidade", "VARCHAR"),
-            ("customer_state", "uf", "VARCHAR"),
+        "colunas_raw": [
+            "customer_id", "customer_unique_id", "customer_zip_code_prefix",
+            "customer_city", "customer_state",
         ],
+        "tipadas": [],
     },
     "vendedores": {
+        "select": SELECT_VENDEDORES,
         "chave": ["vendedor_id"],
-        "colunas": [
-            ("seller_id", "vendedor_id", "VARCHAR"),
-            ("seller_zip_code_prefix", "cep_prefixo", "VARCHAR"),
-            ("seller_city", "cidade", "VARCHAR"),
-            ("seller_state", "uf", "VARCHAR"),
+        "colunas_raw": [
+            "seller_id", "seller_zip_code_prefix", "seller_city", "seller_state",
         ],
+        "tipadas": [],
     },
     "produtos": {
+        "select": SELECT_PRODUTOS,
         "chave": ["produto_id"],
-        "colunas": [
-            ("product_id", "produto_id", "VARCHAR"),
-            ("product_category_name", "categoria", "VARCHAR"),
+        "colunas_raw": [
+            "product_id", "product_category_name", "product_name_lenght",
+            "product_description_lenght", "product_photos_qty", "product_weight_g",
+            "product_length_cm", "product_height_cm", "product_width_cm",
+        ],
+        "tipadas": [
             ("product_name_lenght", "tamanho_nome", "INTEGER"),
             ("product_description_lenght", "tamanho_descricao", "INTEGER"),
             ("product_photos_qty", "qtd_fotos", "INTEGER"),
@@ -221,20 +327,21 @@ TABELAS = {
         ],
     },
     "traducao_categorias": {
+        "select": SELECT_TRADUCAO_CATEGORIAS,
         "chave": ["categoria"],
-        "colunas": [
-            ("product_category_name", "categoria", "VARCHAR"),
-            ("product_category_name_english", "categoria_en", "VARCHAR"),
-        ],
+        "colunas_raw": ["product_category_name", "product_category_name_english"],
+        "tipadas": [],
     },
     "avaliacoes": {
+        "select": SELECT_AVALIACOES,
         "chave": ["avaliacao_id", "pedido_id"],
-        "colunas": [
-            ("review_id", "avaliacao_id", "VARCHAR"),
-            ("order_id", "pedido_id", "VARCHAR"),
+        "colunas_raw": [
+            "review_id", "order_id", "review_score", "review_comment_title",
+            "review_comment_message", "review_creation_date",
+            "review_answer_timestamp",
+        ],
+        "tipadas": [
             ("review_score", "nota", "INTEGER"),
-            ("review_comment_title", "titulo", "VARCHAR"),
-            ("review_comment_message", "comentario", "VARCHAR"),
             ("review_creation_date", "data_criacao", "DATE"),
             ("review_answer_timestamp", "data_resposta", "TIMESTAMP"),
         ],
@@ -251,9 +358,8 @@ def quoted(nome):
 
 
 def expressao(ref, tipo):
-    # strptime e CAST estouram em falha. Nunca trocar por try_* ou TRY_CAST.
-    if tipo == "VARCHAR":
-        return ref
+    # Usado só no caminho de erro, para achar a coluna e o valor que falhou.
+    # Mesma conversão do SELECT literal: strptime e CAST, que estouram.
     if tipo == "TIMESTAMP":
         return f"strptime({ref}, '{FORMATO_DATA_HORA}')"
     if tipo == "DATE":
@@ -272,8 +378,9 @@ def tabelas_faltando(con):
     return [t for t in TABELAS if t not in existentes]
 
 
-def verificar_mapa(con, tabela, colunas):
-    # O mapa tem que cobrir exatamente o raw: sem coluna solta e sem coluna perdida.
+def verificar_mapa(con, tabela, colunas_raw):
+    # O SELECT literal tem que ler exatamente as colunas de raw: sem coluna
+    # solta (que seria descartada em silêncio) e sem coluna faltando.
     no_raw = {
         linha[0]
         for linha in con.execute(
@@ -282,11 +389,11 @@ def verificar_mapa(con, tabela, colunas):
             [SCHEMA_ENTRADA, tabela],
         ).fetchall()
     }
-    no_mapa = {origem for origem, _, _ in colunas}
-    fora = sorted(no_raw - no_mapa)
-    faltam = sorted(no_mapa - no_raw)
+    esperadas = set(colunas_raw)
+    fora = sorted(no_raw - esperadas)
+    faltam = sorted(esperadas - no_raw)
     if fora or faltam:
-        print(f"ERRO: raw.{tabela} não bate com o mapa da spec.")
+        print(f"ERRO: raw.{tabela} não bate com o SELECT da transformação.")
         if fora:
             print(f"  colunas no raw fora do mapa: {', '.join(fora)}")
         if faltam:
@@ -295,8 +402,7 @@ def verificar_mapa(con, tabela, colunas):
 
 
 def primeiro_valor_que_falha(con, tabela, origem, tipo):
-    # Só roda no caminho de erro, para mostrar um exemplo. Usa a mesma
-    # expressão de conversão, valor a valor, sem nenhuma variante try_.
+    # Só roda no caminho de erro, para mostrar um exemplo.
     valores = con.execute(
         f"SELECT DISTINCT {quoted(origem)} FROM {SCHEMA_ENTRADA}.{quoted(tabela)} "
         f"WHERE {quoted(origem)} IS NOT NULL ORDER BY 1"
@@ -310,35 +416,33 @@ def primeiro_valor_que_falha(con, tabela, origem, tipo):
     return None
 
 
-def converter_ou_parar(con, tabela, colunas):
-    # Varre cada coluna tipada até o fim. Na primeira falha, diz onde e para.
-    for origem, destino, tipo in colunas:
-        if tipo == "VARCHAR":
-            continue
+def reportar_falha(con, tabela, erro):
+    # O SELECT literal estourou. Acha a coluna e um valor que não converte.
+    for origem, destino, tipo in TABELAS[tabela]["tipadas"]:
         try:
             con.execute(
                 f"SELECT count({expressao(quoted(origem), tipo)}) "
                 f"FROM {SCHEMA_ENTRADA}.{quoted(tabela)}"
             ).fetchall()
-        except duckdb.Error as erro:
+        except duckdb.Error as erro_coluna:
             exemplo = primeiro_valor_que_falha(con, tabela, origem, tipo)
             print(f"ERRO de conversão: {SCHEMA_ENTRADA}.{tabela}.{origem} -> {destino} ({tipo})")
             print(f"  valor que não converteu: {exemplo!r}")
-            print(f"  detalhe do DuckDB: {erro}")
+            print(f"  detalhe do DuckDB: {erro_coluna}")
             sys.exit(1)
+    print(f"ERRO de conversão em {SCHEMA_ENTRADA}.{tabela}: {erro}")
+    sys.exit(1)
 
 
-def preparar(con, tabela, chave, colunas):
-    # Monta a versão tipada em tabela temporária e checa duplicatas sobre ela.
-    # Não grava refined ainda: a gravação só acontece depois que todas as oito passam.
-    select = ", ".join(
-        f"{expressao(quoted(origem), tipo)} AS {destino}" for origem, destino, tipo in colunas
-    )
-    con.execute(
-        f"CREATE OR REPLACE TEMP TABLE tmp_{tabela} AS "
-        f"SELECT {select} FROM {SCHEMA_ENTRADA}.{quoted(tabela)}"
-    )
-    entrada = con.execute(f"SELECT count(*) FROM tmp_{tabela}").fetchone()[0]
+def preparar(con, tabela, select, chave):
+    # Materializa o SELECT literal em tabela temporária e checa duplicatas nela.
+    # Não grava refined: a gravação só acontece depois que as oito passam.
+    try:
+        con.execute(f"CREATE OR REPLACE TEMP TABLE tmp_{tabela} AS {select}")
+    except duckdb.Error as erro:
+        reportar_falha(con, tabela, erro)
+
+    entrada = con.execute(f"SELECT count(*) FROM {SCHEMA_ENTRADA}.{quoted(tabela)}").fetchone()[0]
     sem_repeticao = f"(SELECT DISTINCT * FROM tmp_{tabela})"
     saida = con.execute(f"SELECT count(*) FROM {sem_repeticao}").fetchone()[0]
 
@@ -357,7 +461,6 @@ def preparar(con, tabela, chave, colunas):
         chave_txt = ", ".join(f"{k}={v!r}" for k, v in zip(chave, primeira))
         print(f"ERRO: chave repetida com conteúdo diferente em {SCHEMA_SAIDA}.{tabela}")
         print(f"  chave: {chave_txt}  ({len(conflitos)} chave(s) em conflito no total)")
-        print(f"  colunas: {', '.join(d for _, d, _ in colunas)}")
         for linha in linhas:
             print(f"  {linha}")
         sys.exit(1)
@@ -373,17 +476,19 @@ def gravar(con, tabela, chave):
     return con.execute(f"SELECT count(*) FROM {SCHEMA_SAIDA}.{quoted(tabela)}").fetchone()[0]
 
 
-def nulos_mantidos(con, tabela, colunas):
+def nulos_mantidos(con, tabela):
     # nulos = total - count(coluna): count ignora nulo. Contagem vinda do banco.
-    expr = ", ".join(f"count(*) - count({quoted(destino)})" for _, destino, _ in colunas)
-    valores = con.execute(
-        f"SELECT {expr} FROM {SCHEMA_SAIDA}.{quoted(tabela)}"
-    ).fetchone()
-    return [
-        (destino, n)
-        for (_, destino, _), n in zip(colunas, valores)
-        if n > 0
+    colunas = [
+        linha[0]
+        for linha in con.execute(
+            "SELECT column_name FROM information_schema.columns "
+            "WHERE table_schema = ? AND table_name = ? ORDER BY ordinal_position",
+            [SCHEMA_SAIDA, tabela],
+        ).fetchall()
     ]
+    expr = ", ".join(f"count(*) - count({quoted(c)})" for c in colunas)
+    valores = con.execute(f"SELECT {expr} FROM {SCHEMA_SAIDA}.{quoted(tabela)}").fetchone()
+    return [(c, n) for c, n in zip(colunas, valores) if n > 0]
 
 
 def main():
@@ -398,14 +503,13 @@ def main():
             sys.exit(1)
 
         for tabela, spec in TABELAS.items():
-            verificar_mapa(con, tabela, spec["colunas"])
+            verificar_mapa(con, tabela, spec["colunas_raw"])
 
-        # Fase 1: valida e prepara todas as tabelas. Qualquer falha sai aqui,
-        # antes de refined ser tocado.
+        # Fase 1: materializa, valida e checa duplicatas de todas as oito.
+        # Qualquer falha sai aqui, antes de refined ser tocado.
         contagens = {}
         for tabela, spec in TABELAS.items():
-            converter_ou_parar(con, tabela, spec["colunas"])
-            contagens[tabela] = preparar(con, tabela, spec["chave"], spec["colunas"])
+            contagens[tabela] = preparar(con, tabela, spec["select"], spec["chave"])
 
         # Fase 2: grava refined.
         db.criar_schema(con, SCHEMA_SAIDA)
@@ -419,7 +523,7 @@ def main():
                 f"{nome:<28} {milhar(contagem['entrada']):>7} -> {milhar(saida):>7} linhas  "
                 f"({milhar(contagem['duplicatas'])} duplicatas)"
             )
-            nulos = nulos_mantidos(con, tabela, spec["colunas"])
+            nulos = nulos_mantidos(con, tabela)
             if nulos:
                 texto = ", ".join(f"{col} {milhar(n)}" for col, n in nulos)
                 print(f"    nulos mantidos: {texto}")
