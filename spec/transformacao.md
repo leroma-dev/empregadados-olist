@@ -165,3 +165,7 @@ ENTREGA, nesta ordem
 2. O código, com comentários apenas onde a decisão não é óbvia pelo código.
 3. Uma lista final do que você assumiu e que não estava na spec. Se a lista
    não estiver vazia, é a minha spec que precisa melhorar.
+
+   Você tem acesso ao meu banco olist.duckdb pelo MCP, em somente leitura.
+Leia specs/transformacao.md: é a fonte da verdade.
+
