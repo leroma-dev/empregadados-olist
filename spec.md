@@ -6,7 +6,7 @@ acrescente requisito que não esteja escrito aqui. Se algo estiver ambíguo,
 pergunte antes de escrever código.
 
 STACK
-- Python 3.13, dependências gerenciadas com uv
+- Python 3.15, dependências gerenciadas com uv
 - pandas para ler os arquivos
 - DuckDB como banco, arquivo olist.duckdb na raiz do projeto
 - Nenhum orquestrador. Script executável pela linha de comando.
