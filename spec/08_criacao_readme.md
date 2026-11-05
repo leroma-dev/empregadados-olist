@@ -1,0 +1,1 @@
+Analise a base de codigo e atualize o readme.md com a descricao do projeto, instrucoes de utilizacao, capacidades, recursos, arquitetura e dependencias
