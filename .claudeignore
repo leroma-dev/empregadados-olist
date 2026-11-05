@@ -1,0 +1,16 @@
+# Dependencies
+node_modules/
+venv/
+.venv/
+__pycache__/
+.claude/ignore/
+
+# Build outputs
+dist/
+build/
+.next/
+
+# Secrets
+.env
+*.local
+
