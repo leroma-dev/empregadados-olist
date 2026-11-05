@@ -58,6 +58,8 @@ def main():
 
     con = duckdb.connect(str(banco))
     try:
+        # con.execute("UPDATE EXTENSIONS")
+        # con.execute("FORCE INSTALL ui").fetchall()
         con.execute("INSTALL ui").fetchall()
         con.execute("LOAD ui").fetchall()
         con.execute("CALL start_ui()").fetchall()
